@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      STORAGE_DIR: /data
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-50}
+    volumes:
+      - mermaid_data:/data
+    restart: unless-stopped
+
+volumes:
+  mermaid_data:

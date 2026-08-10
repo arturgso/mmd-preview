@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Mermaid Viewer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script defer src="{{ url_for('static', filename='vendor/mermaid.min.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+  </head>
+  <body>
+    <aside class="sidebar" id="sidebar">
+      <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Recolher menu" aria-expanded="true">‹</button>
+      <div class="sidebar-content">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">M</span>
+          <div><strong>Mermaid Viewer</strong><small>Visualizador de diagramas</small></div>
+        </div>
+
+        <div class="upload-actions">
+          <button class="primary-button" id="upload-files-button" type="button">Upload de arquivos</button>
+          <button class="secondary-button" id="upload-folder-button" type="button">Selecionar pasta</button>
+          <input id="file-input" type="file" accept=".mmd" multiple hidden>
+          <input id="folder-input" type="file" webkitdirectory multiple hidden>
+        </div>
+
+        <div class="status" id="upload-status" role="status" aria-live="polite"></div>
+
+        <label class="search">
+          <span aria-hidden="true">⌕</span>
+          <input id="search-input" type="search" placeholder="Buscar por nome ou caminho…" autocomplete="off">
+        </label>
+
+        <div class="file-summary">
+          <span>Diagramas</span><span id="file-count">0 arquivos</span>
+        </div>
+        <nav class="file-tree" id="file-tree" aria-label="Arquivos Mermaid"></nav>
+
+        <div class="sidebar-footer">
+          <div class="zoom-actions" aria-label="Controles do preview">
+            <button id="zoom-out" type="button" title="Diminuir zoom" disabled>−</button>
+            <button id="zoom-reset" type="button" title="Ajustar à tela" disabled>100%</button>
+            <button id="zoom-in" type="button" title="Aumentar zoom" disabled>+</button>
+          </div>
+          <button class="delete-button" id="delete-button" type="button" disabled>Excluir selecionado</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="preview" id="preview">
+      <div class="current-file" id="current-file" hidden></div>
+      <div class="preview-message" id="preview-message">
+        <div class="empty-icon" aria-hidden="true">◇</div>
+        <strong>Selecione um diagrama</strong>
+        <span>Envie arquivos .mmd e escolha um item na sidebar.</span>
+      </div>
+      <div class="viewport" id="viewport" hidden>
+        <div class="diagram-stage" id="diagram-stage"></div>
+      </div>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,177 @@
+import os
+import re
+import tempfile
+from pathlib import Path, PurePosixPath
+
+from flask import Flask, jsonify, render_template, request
+from werkzeug.exceptions import RequestEntityTooLarge
+
+
+CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")
+
+
+class InvalidPath(ValueError):
+    pass
+
+
+def create_app(storage_dir=None):
+    app = Flask(__name__)
+    app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "50")) * 1024 * 1024
+
+    configured_storage = storage_dir or os.getenv("STORAGE_DIR", "/data")
+    storage_root = Path(configured_storage).resolve()
+    storage_root.mkdir(parents=True, exist_ok=True)
+    app.config["STORAGE_ROOT"] = storage_root
+
+    def safe_path(raw_path):
+        if not isinstance(raw_path, str):
+            raise InvalidPath("Caminho ausente.")
+
+        normalized = raw_path.replace("\\", "/").strip()
+        if not normalized or normalized.startswith("/") or WINDOWS_DRIVE.match(normalized):
+            raise InvalidPath("Caminho inválido.")
+        if CONTROL_CHARS.search(normalized):
+            raise InvalidPath("O caminho contém caracteres inválidos.")
+
+        relative = PurePosixPath(normalized)
+        if any(part in ("", ".", "..") for part in relative.parts):
+            raise InvalidPath("O caminho não pode conter '.' ou '..'.")
+        if relative.suffix.lower() != ".mmd":
+            raise InvalidPath("Somente arquivos .mmd são permitidos.")
+
+        target = storage_root.joinpath(*relative.parts)
+        try:
+            target.resolve(strict=False).relative_to(storage_root)
+        except ValueError as exc:
+            raise InvalidPath("O caminho está fora do diretório de dados.") from exc
+
+        current = storage_root
+        for part in relative.parts:
+            current = current / part
+            if current.exists() and current.is_symlink():
+                raise InvalidPath("Links simbólicos não são permitidos.")
+
+        return target, relative.as_posix()
+
+    def list_files():
+        files = []
+        for candidate in storage_root.rglob("*"):
+            if not candidate.is_file() or candidate.is_symlink():
+                continue
+            relative = candidate.relative_to(storage_root)
+            if relative.suffix.lower() != ".mmd":
+                continue
+            if any(parent.is_symlink() for parent in candidate.parents if parent != storage_root):
+                continue
+            files.append(relative.as_posix())
+        return sorted(files, key=str.casefold)
+
+    @app.get("/")
+    def index():
+        return render_template("index.html")
+
+    @app.get("/api/files")
+    def files_index():
+        files = list_files()
+        return jsonify(files=files, count=len(files))
+
+    @app.get("/api/file")
+    def read_file():
+        try:
+            target, relative = safe_path(request.args.get("path"))
+            if not target.is_file():
+                return jsonify(error="Arquivo não encontrado."), 404
+            content = target.read_text(encoding="utf-8")
+            return jsonify(path=relative, content=content)
+        except InvalidPath as exc:
+            return jsonify(error=str(exc)), 400
+        except UnicodeDecodeError:
+            return jsonify(error="O arquivo não contém texto UTF-8 válido."), 422
+        except OSError:
+            app.logger.exception("Falha ao ler arquivo")
+            return jsonify(error="Não foi possível ler o arquivo."), 500
+
+    @app.post("/api/files")
+    def upload_files():
+        uploads = request.files.getlist("files")
+        paths = request.form.getlist("paths")
+        if not uploads:
+            return jsonify(error="Nenhum arquivo foi enviado."), 400
+
+        accepted = []
+        replaced = []
+        rejected = []
+
+        for index, upload in enumerate(uploads):
+            submitted_path = paths[index] if index < len(paths) else upload.filename
+            display_path = submitted_path or upload.filename or "arquivo sem nome"
+            temp_name = None
+            try:
+                target, relative = safe_path(submitted_path)
+                data = upload.read()
+                data.decode("utf-8")
+                existed = target.is_file()
+                target.parent.mkdir(parents=True, exist_ok=True)
+
+                with tempfile.NamedTemporaryFile(
+                    mode="wb", dir=target.parent, prefix=".upload-", suffix=".tmp", delete=False
+                ) as temporary:
+                    temp_name = temporary.name
+                    temporary.write(data)
+                os.replace(temp_name, target)
+                temp_name = None
+                (replaced if existed else accepted).append(relative)
+            except (InvalidPath, UnicodeDecodeError) as exc:
+                reason = str(exc) if isinstance(exc, InvalidPath) else "O arquivo não contém texto UTF-8 válido."
+                rejected.append({"path": display_path, "reason": reason})
+            except OSError:
+                app.logger.exception("Falha ao gravar upload")
+                rejected.append({"path": display_path, "reason": "Não foi possível gravar o arquivo."})
+            finally:
+                if temp_name:
+                    try:
+                        Path(temp_name).unlink(missing_ok=True)
+                    except OSError:
+                        app.logger.warning("Falha ao remover arquivo temporário %s", temp_name)
+
+        payload = {"accepted": accepted, "replaced": replaced, "rejected": rejected}
+        if not accepted and not replaced:
+            return jsonify(payload), 400
+        return jsonify(payload)
+
+    @app.delete("/api/file")
+    def delete_file():
+        try:
+            target, relative = safe_path(request.args.get("path"))
+            if not target.is_file():
+                return jsonify(error="Arquivo não encontrado."), 404
+            target.unlink()
+
+            parent = target.parent
+            while parent != storage_root:
+                try:
+                    parent.rmdir()
+                except OSError:
+                    break
+                parent = parent.parent
+            return jsonify(deleted=relative)
+        except InvalidPath as exc:
+            return jsonify(error=str(exc)), 400
+        except OSError:
+            app.logger.exception("Falha ao excluir arquivo")
+            return jsonify(error="Não foi possível excluir o arquivo."), 500
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def request_too_large(_error):
+        limit = int(app.config["MAX_CONTENT_LENGTH"] / 1024 / 1024)
+        return jsonify(error=f"O upload excede o limite de {limit} MB."), 413
+
+    return app
+
+
+app = create_app()
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
