@@ -70,6 +70,32 @@ class MermaidViewerTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse((Path(self.temporary.name) / "folder").exists())
 
+    def test_delete_directory_and_all_its_content(self):
+        self.upload("folder/README.md", b"# Docs")
+        self.upload("folder/nested/item.mmd")
+        response = self.client.delete("/api/directory?path=folder")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["deleted"], "folder")
+        self.assertFalse((Path(self.temporary.name) / "folder").exists())
+        self.assertEqual(self.client.get("/api/files").get_json()["files"], [])
+
+    def test_delete_directory_rejects_root_traversal_and_symlinks(self):
+        self.assertEqual(self.client.delete("/api/directory?path=..").status_code, 400)
+        folder = Path(self.temporary.name) / "folder"
+        folder.mkdir()
+        outside = Path(self.temporary.name).parent / "outside-directory-test.txt"
+        outside.write_text("keep", encoding="utf-8")
+        link = folder / "link"
+        try:
+            link.symlink_to(outside)
+            response = self.client.delete("/api/directory?path=folder")
+            self.assertEqual(response.status_code, 400)
+            self.assertTrue(folder.exists())
+            self.assertEqual(outside.read_text(encoding="utf-8"), "keep")
+        finally:
+            link.unlink(missing_ok=True)
+            outside.unlink(missing_ok=True)
+
     def test_rename_file_and_directory(self):
         self.upload("old-folder/old.mmd")
         file_response = self.client.patch(

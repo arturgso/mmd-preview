@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import tempfile
 from pathlib import Path, PurePosixPath
 
@@ -176,6 +177,23 @@ def create_app(storage_dir=None):
         except OSError:
             app.logger.exception("Falha ao excluir arquivo")
             return jsonify(error="Não foi possível excluir o arquivo."), 500
+
+    @app.delete("/api/directory")
+    def delete_directory():
+        try:
+            target, relative = safe_directory(request.args.get("path"))
+            if not target.is_dir():
+                return jsonify(error="Pasta não encontrada."), 404
+            if any(item.is_symlink() for item in target.rglob("*")):
+                return jsonify(error="A pasta contém links simbólicos e não pode ser excluída."), 400
+
+            shutil.rmtree(target)
+            return jsonify(deleted=relative)
+        except InvalidPath as exc:
+            return jsonify(error=str(exc)), 400
+        except OSError:
+            app.logger.exception("Falha ao excluir pasta")
+            return jsonify(error="Não foi possível excluir a pasta."), 500
 
     @app.patch("/api/path")
     def rename_path():

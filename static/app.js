@@ -106,7 +106,12 @@
         event.stopPropagation();
         renameItem("directory", folderPathFor(details));
       });
-      folderActions.append(renameFolder);
+      const deleteFolder = actionButton("×", `Excluir pasta ${name}`, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        deleteDirectory(folderPathFor(details));
+      }, "danger-action");
+      folderActions.append(renameFolder, deleteFolder);
       summary.append(folderLabel, folderActions);
       const children = document.createElement("div");
       children.className = "tree-children";
@@ -315,6 +320,30 @@
       if (wasSelected) {
         const next = files[Math.min(previousIndex, files.length - 1)];
         if (next) await selectFile(next);
+        else showMessage("Nenhum arquivo disponível", "Envie um arquivo .mmd ou README.md para começar.");
+      }
+    } catch (error) {
+      setStatus(error.message, true);
+      await refreshFiles();
+    }
+  }
+
+  async function deleteDirectory(path) {
+    if (!path || !window.confirm(`Excluir a pasta “${path}” e todo o seu conteúdo? Esta ação não pode ser desfeita.`)) return;
+    const selectionWasInside = selectedPath && (selectedPath === path || selectedPath.startsWith(`${path}/`));
+    try {
+      await api(`/api/directory?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+      if (selectionWasInside) {
+        selectedPath = null;
+        elements.currentFile.hidden = true;
+        elements.stage.replaceChildren();
+        elements.markdown.replaceChildren();
+        setControls(false);
+      }
+      await refreshFiles(selectedPath);
+      setStatus("Pasta e seu conteúdo foram excluídos.");
+      if (selectionWasInside) {
+        if (files.length) await selectFile(files[0]);
         else showMessage("Nenhum arquivo disponível", "Envie um arquivo .mmd ou README.md para começar.");
       }
     } catch (error) {

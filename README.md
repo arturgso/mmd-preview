@@ -53,6 +53,7 @@ Também é possível trocar o volume nomeado por um bind mount, como `./data:/da
 - **Substituir:** envie novamente um arquivo com o mesmo caminho e nome.
 - **Renomear:** use o ícone de lápis ao lado de um arquivo ou pasta. Nomes existentes não são sobrescritos.
 - **Excluir:** use o ícone de exclusão na própria linha do arquivo.
+- **Excluir pasta:** use o ícone de exclusão na linha da pasta e confirme para remover todo o conteúdo dela.
 - **Buscar:** filtre por qualquer trecho do nome ou do caminho.
 - **Preview:** use os controles da sidebar, a roda do mouse e o arraste para zoom e pan.
 - **README:** Markdown GFM é sanitizado e exibido com rolagem normal. Blocos `mermaid` cercados por três crases são renderizados como diagramas.
@@ -90,6 +91,7 @@ python -m unittest discover -s tests -v
 - `GET /api/file?path=...` — lê um arquivo.
 - `POST /api/files` — recebe multipart com os campos repetidos `paths` e `files`.
 - `DELETE /api/file?path=...` — exclui um arquivo.
+- `DELETE /api/directory?path=...` — exclui uma pasta e todo o conteúdo, recusando links simbólicos.
 - `PATCH /api/path` — renomeia um arquivo ou diretório sem sobrescrever itens existentes.
 
 Somente caminhos relativos terminados em `.mmd` ou cujo nome seja `README.md` são aceitos. Caminhos absolutos, traversal, links simbólicos e conteúdo que não seja UTF-8 são rejeitados.
