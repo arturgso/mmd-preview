@@ -69,6 +69,32 @@ class MermaidViewerTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse((Path(self.temporary.name) / "folder").exists())
 
+    def test_rename_file_and_directory(self):
+        self.upload("old-folder/old.mmd")
+        file_response = self.client.patch(
+            "/api/path",
+            json={"type": "file", "old_path": "old-folder/old.mmd", "new_path": "old-folder/new.mmd"},
+        )
+        self.assertEqual(file_response.status_code, 200)
+        directory_response = self.client.patch(
+            "/api/path",
+            json={"type": "directory", "old_path": "old-folder", "new_path": "new-folder"},
+        )
+        self.assertEqual(directory_response.status_code, 200)
+        self.assertEqual(self.client.get("/api/files").get_json()["files"], ["new-folder/new.mmd"])
+
+    def test_rename_rejects_collision_and_invalid_extension(self):
+        self.upload("one.mmd")
+        self.upload("two.mmd")
+        collision = self.client.patch(
+            "/api/path", json={"type": "file", "old_path": "one.mmd", "new_path": "two.mmd"}
+        )
+        invalid = self.client.patch(
+            "/api/path", json={"type": "file", "old_path": "one.mmd", "new_path": "one.txt"}
+        )
+        self.assertEqual(collision.status_code, 409)
+        self.assertEqual(invalid.status_code, 400)
+
     def test_symlinks_are_not_listed_or_read(self):
         outside = Path(self.temporary.name).parent / "outside-test.mmd"
         outside.write_text("graph TD; X-->Y", encoding="utf-8")

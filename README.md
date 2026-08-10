@@ -1,6 +1,6 @@
 # Mermaid Viewer
 
-Visualizador web pequeno para arquivos Mermaid (`.mmd`). Permite enviar arquivos ou pastas, navegar pela estrutura preservada e visualizar os diagramas com zoom e pan. Não possui editor, banco de dados ou autenticação.
+Visualizador web pequeno e em tema escuro para arquivos Mermaid (`.mmd`). Permite enviar arquivos ou pastas, navegar pela estrutura preservada, renomear itens e visualizar os diagramas com zoom e pan. Não possui editor, banco de dados ou autenticação.
 
 ## Executar com Docker
 
@@ -51,7 +51,8 @@ Também é possível trocar o volume nomeado por um bind mount, como `./data:/da
 - **Upload de arquivos:** escolha um ou vários `.mmd`; eles serão armazenados na raiz.
 - **Selecionar pasta:** escolha uma pasta inteira; sua estrutura relativa será preservada. Arquivos que não terminem em `.mmd` serão informados como rejeitados.
 - **Substituir:** envie novamente um arquivo com o mesmo caminho e nome.
-- **Excluir:** selecione o arquivo na árvore e use **Excluir selecionado**.
+- **Renomear:** use o ícone de lápis ao lado de um arquivo ou pasta. Nomes existentes não são sobrescritos.
+- **Excluir:** use o ícone de exclusão na própria linha do arquivo.
 - **Buscar:** filtre por qualquer trecho do nome ou do caminho.
 - **Preview:** use os controles da sidebar, a roda do mouse e o arraste para zoom e pan.
 
@@ -86,5 +87,6 @@ python -m unittest discover -s tests -v
 - `GET /api/file?path=...` — lê um arquivo.
 - `POST /api/files` — recebe multipart com os campos repetidos `paths` e `files`.
 - `DELETE /api/file?path=...` — exclui um arquivo.
+- `PATCH /api/path` — renomeia um arquivo ou diretório sem sobrescrever itens existentes.
 
 Somente caminhos relativos terminados em `.mmd` são aceitos. Caminhos absolutos, traversal, links simbólicos e conteúdo que não seja UTF-8 são rejeitados.

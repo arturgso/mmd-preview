@@ -24,7 +24,7 @@ def create_app(storage_dir=None):
     storage_root.mkdir(parents=True, exist_ok=True)
     app.config["STORAGE_ROOT"] = storage_root
 
-    def safe_path(raw_path):
+    def safe_path(raw_path, require_mmd=True):
         if not isinstance(raw_path, str):
             raise InvalidPath("Caminho ausente.")
 
@@ -37,7 +37,7 @@ def create_app(storage_dir=None):
         relative = PurePosixPath(normalized)
         if any(part in ("", ".", "..") for part in relative.parts):
             raise InvalidPath("O caminho não pode conter '.' ou '..'.")
-        if relative.suffix.lower() != ".mmd":
+        if require_mmd and relative.suffix.lower() != ".mmd":
             raise InvalidPath("Somente arquivos .mmd são permitidos.")
 
         target = storage_root.joinpath(*relative.parts)
@@ -53,6 +53,12 @@ def create_app(storage_dir=None):
                 raise InvalidPath("Links simbólicos não são permitidos.")
 
         return target, relative.as_posix()
+
+    def safe_directory(raw_path):
+        target, relative = safe_path(raw_path, require_mmd=False)
+        if target == storage_root:
+            raise InvalidPath("O diretório raiz não pode ser renomeado.")
+        return target, relative
 
     def list_files():
         files = []
@@ -161,6 +167,39 @@ def create_app(storage_dir=None):
         except OSError:
             app.logger.exception("Falha ao excluir arquivo")
             return jsonify(error="Não foi possível excluir o arquivo."), 500
+
+    @app.patch("/api/path")
+    def rename_path():
+        data = request.get_json(silent=True) or {}
+        item_type = data.get("type")
+        resolver = safe_path if item_type == "file" else safe_directory if item_type == "directory" else None
+        if resolver is None:
+            return jsonify(error="Tipo de item inválido."), 400
+
+        try:
+            source, old_relative = resolver(data.get("old_path"))
+            destination, new_relative = resolver(data.get("new_path"))
+            if source == destination:
+                return jsonify(old_path=old_relative, new_path=new_relative, type=item_type)
+            if not source.exists() or (item_type == "file" and not source.is_file()) or (item_type == "directory" and not source.is_dir()):
+                return jsonify(error="Arquivo ou pasta não encontrado."), 404
+            if destination.exists():
+                return jsonify(error="Já existe um item com esse nome."), 409
+            if item_type == "directory":
+                try:
+                    destination.relative_to(source)
+                    return jsonify(error="Uma pasta não pode ser movida para dentro dela mesma."), 400
+                except ValueError:
+                    pass
+
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            source.rename(destination)
+            return jsonify(old_path=old_relative, new_path=new_relative, type=item_type)
+        except InvalidPath as exc:
+            return jsonify(error=str(exc)), 400
+        except OSError:
+            app.logger.exception("Falha ao renomear item")
+            return jsonify(error="Não foi possível renomear o item."), 500
 
     @app.errorhandler(RequestEntityTooLarge)
     def request_too_large(_error):

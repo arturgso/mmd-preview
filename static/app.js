@@ -10,7 +10,6 @@
     folderInput: document.querySelector("#folder-input"),
     uploadFiles: document.querySelector("#upload-files-button"),
     uploadFolder: document.querySelector("#upload-folder-button"),
-    deleteButton: document.querySelector("#delete-button"),
     zoomIn: document.querySelector("#zoom-in"),
     zoomOut: document.querySelector("#zoom-out"),
     zoomReset: document.querySelector("#zoom-reset"),
@@ -35,7 +34,7 @@
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: "strict",
-    theme: "default",
+    theme: "dark",
     suppressErrorRendering: true,
   });
 
@@ -95,7 +94,18 @@
       details.className = "tree-folder";
       details.open = openFolders || Boolean(elements.search.value);
       const summary = document.createElement("summary");
-      summary.textContent = `📁 ${name}`;
+      const folderLabel = document.createElement("span");
+      folderLabel.className = "folder-label";
+      folderLabel.textContent = `📁 ${name}`;
+      const folderActions = document.createElement("span");
+      folderActions.className = "item-actions";
+      const renameFolder = actionButton("✎", `Renomear pasta ${name}`, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        renameItem("directory", folderPathFor(details));
+      });
+      folderActions.append(renameFolder);
+      summary.append(folderLabel, folderActions);
       const children = document.createElement("div");
       children.className = "tree-children";
       children.append(renderNode(child, openFolders));
@@ -103,9 +113,11 @@
       fragment.append(details);
     });
     node.files.sort((a, b) => a.name.localeCompare(b.name, "pt-BR")).forEach((file) => {
+      const row = document.createElement("div");
+      row.className = `file-row${file.path === selectedPath ? " selected" : ""}`;
       const button = document.createElement("button");
       button.type = "button";
-      button.className = `file-item${file.path === selectedPath ? " selected" : ""}`;
+      button.className = "file-item";
       button.title = file.path;
       button.dataset.path = file.path;
       const label = document.createElement("span");
@@ -113,7 +125,14 @@
       label.textContent = file.name;
       button.append(label);
       button.addEventListener("click", () => selectFile(file.path));
-      fragment.append(button);
+      const actions = document.createElement("div");
+      actions.className = "item-actions";
+      actions.append(
+        actionButton("✎", `Renomear ${file.name}`, () => renameItem("file", file.path)),
+        actionButton("×", `Excluir ${file.name}`, () => deleteFile(file.path), "danger-action")
+      );
+      row.append(button, actions);
+      fragment.append(row);
     });
     return fragment;
   }
@@ -124,7 +143,6 @@
     showMessage("Carregando diagrama…", "");
     elements.currentFile.textContent = path;
     elements.currentFile.hidden = false;
-    elements.deleteButton.disabled = false;
     const sequence = ++renderSequence;
     try {
       const data = await api(`/api/file?path=${encodeURIComponent(path)}`);
@@ -237,22 +255,86 @@
     elements.status.classList.toggle("error", isError);
   }
 
-  async function deleteSelected() {
-    if (!selectedPath || !window.confirm(`Excluir “${selectedPath}”?`)) return;
-    const deleted = selectedPath;
+  async function deleteFile(path) {
+    if (!path || !window.confirm(`Excluir “${path}”?`)) return;
+    const deleted = path;
+    const wasSelected = selectedPath === deleted;
     try {
       await api(`/api/file?path=${encodeURIComponent(deleted)}`, { method: "DELETE" });
       const previousIndex = files.indexOf(deleted);
-      selectedPath = null;
-      elements.currentFile.hidden = true;
-      elements.deleteButton.disabled = true;
-      elements.stage.replaceChildren();
-      setControls(false);
-      await refreshFiles();
+      if (wasSelected) {
+        selectedPath = null;
+        elements.currentFile.hidden = true;
+        elements.stage.replaceChildren();
+        setControls(false);
+      }
+      await refreshFiles(selectedPath);
       setStatus("Arquivo excluído.");
-      const next = files[Math.min(previousIndex, files.length - 1)];
-      if (next) await selectFile(next);
-      else showMessage("Nenhum diagrama disponível", "Envie um arquivo .mmd para começar.");
+      if (wasSelected) {
+        const next = files[Math.min(previousIndex, files.length - 1)];
+        if (next) await selectFile(next);
+        else showMessage("Nenhum diagrama disponível", "Envie um arquivo .mmd para começar.");
+      }
+    } catch (error) {
+      setStatus(error.message, true);
+      await refreshFiles();
+    }
+  }
+
+  function actionButton(symbol, label, handler, extraClass = "") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `item-action ${extraClass}`.trim();
+    button.textContent = symbol;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      handler(event);
+    });
+    return button;
+  }
+
+  function folderPathFor(details) {
+    const names = [];
+    let current = details;
+    while (current && current.classList && current.classList.contains("tree-folder")) {
+      names.unshift(current.querySelector(":scope > summary .folder-label").textContent.replace(/^📁\s*/, ""));
+      current = current.parentElement.closest(".tree-folder");
+    }
+    return names.join("/");
+  }
+
+  async function renameItem(type, oldPath) {
+    const parts = oldPath.split("/");
+    const oldName = parts.pop();
+    const requested = window.prompt(`Novo nome para ${type === "file" ? "o arquivo" : "a pasta"}:`, oldName);
+    if (requested === null) return;
+    const newName = requested.trim();
+    if (!newName || newName.includes("/") || newName.includes("\\")) {
+      setStatus("Informe apenas um nome válido, sem barras.", true);
+      return;
+    }
+    if (type === "file" && !newName.toLocaleLowerCase("pt-BR").endsWith(".mmd")) {
+      setStatus("O novo nome do arquivo deve terminar em .mmd.", true);
+      return;
+    }
+    const newPath = [...parts, newName].join("/");
+    try {
+      await api("/api/path", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, old_path: oldPath, new_path: newPath }),
+      });
+      let nextSelection = selectedPath;
+      if (type === "file" && selectedPath === oldPath) nextSelection = newPath;
+      if (type === "directory" && selectedPath && (selectedPath === oldPath || selectedPath.startsWith(`${oldPath}/`))) {
+        nextSelection = newPath + selectedPath.slice(oldPath.length);
+      }
+      selectedPath = nextSelection;
+      await refreshFiles(nextSelection);
+      if (nextSelection && files.includes(nextSelection)) await selectFile(nextSelection);
+      setStatus(`${type === "file" ? "Arquivo" : "Pasta"} renomeado(a).`);
     } catch (error) {
       setStatus(error.message, true);
       await refreshFiles();
@@ -270,7 +352,6 @@
   elements.fileInput.addEventListener("change", () => upload(elements.fileInput.files, false));
   elements.folderInput.addEventListener("change", () => upload(elements.folderInput.files, true));
   elements.search.addEventListener("input", renderTree);
-  elements.deleteButton.addEventListener("click", deleteSelected);
   elements.zoomIn.addEventListener("click", () => zoomTo(scale * 1.2));
   elements.zoomOut.addEventListener("click", () => zoomTo(scale / 1.2));
   elements.zoomReset.addEventListener("click", fitDiagram);
