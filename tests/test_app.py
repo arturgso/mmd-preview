@@ -33,6 +33,7 @@ class MermaidViewerTestCase(unittest.TestCase):
 
         loaded = self.client.get("/api/file?path=architecture/system.mmd")
         self.assertEqual(loaded.status_code, 200)
+        self.assertEqual(loaded.get_json()["type"], "mermaid")
         self.assertIn("A-->B", loaded.get_json()["content"])
 
     def test_existing_file_is_replaced(self):
@@ -94,6 +95,53 @@ class MermaidViewerTestCase(unittest.TestCase):
         )
         self.assertEqual(collision.status_code, 409)
         self.assertEqual(invalid.status_code, 400)
+
+    def test_upload_list_read_and_delete_readme(self):
+        response = self.upload("docs/README.md", b"# Documentation\n\n```mermaid\ngraph TD; A-->B\n```")
+        self.assertEqual(response.status_code, 200)
+        listing = self.client.get("/api/files").get_json()
+        self.assertEqual(listing, {"files": ["docs/README.md"], "count": 1})
+        loaded = self.client.get("/api/file?path=docs/README.md").get_json()
+        self.assertEqual(loaded["type"], "markdown")
+        self.assertIn("# Documentation", loaded["content"])
+        self.assertEqual(self.client.delete("/api/file?path=docs/README.md").status_code, 200)
+
+    def test_readme_name_is_case_insensitive_but_other_markdown_is_rejected(self):
+        accepted = self.upload("project/readme.MD", b"# Project")
+        rejected = self.upload("project/notes.md", b"# Notes")
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(rejected.status_code, 400)
+        self.assertEqual(self.client.get("/api/files").get_json()["files"], ["project/readme.MD"])
+
+    def test_mixed_mermaid_readme_and_rejected_markdown_upload(self):
+        response = self.client.post(
+            "/api/files",
+            data={
+                "paths": ["diagram.mmd", "README.md", "notes.md"],
+                "files": [
+                    (io.BytesIO(b"graph TD; A-->B"), "diagram.mmd"),
+                    (io.BytesIO(b"# Read me"), "README.md"),
+                    (io.BytesIO(b"# Notes"), "notes.md"),
+                ],
+            },
+            content_type="multipart/form-data",
+        )
+        body = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["accepted"], ["diagram.mmd", "README.md"])
+        self.assertEqual(len(body["rejected"]), 1)
+
+    def test_rename_directory_preserves_readme_and_mermaid(self):
+        self.upload("old/README.md", b"# Read me")
+        self.upload("old/diagram.mmd")
+        response = self.client.patch(
+            "/api/path", json={"type": "directory", "old_path": "old", "new_path": "new"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self.client.get("/api/files").get_json()["files"],
+            ["new/diagram.mmd", "new/README.md"],
+        )
 
     def test_symlinks_are_not_listed_or_read(self):
         outside = Path(self.temporary.name).parent / "outside-test.mmd"

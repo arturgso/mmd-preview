@@ -7,6 +7,8 @@
     <title>Mermaid Viewer</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script defer src="{{ url_for('static', filename='vendor/mermaid.min.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='vendor/marked.min.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='vendor/purify.min.js') }}"></script>
     <script defer src="{{ url_for('static', filename='app.js') }}"></script>
   </head>
   <body>
@@ -21,7 +23,7 @@
         <div class="upload-actions">
           <button class="primary-button" id="upload-files-button" type="button">Upload de arquivos</button>
           <button class="secondary-button" id="upload-folder-button" type="button">Selecionar pasta</button>
-          <input id="file-input" type="file" accept=".mmd" multiple hidden>
+          <input id="file-input" type="file" accept=".mmd,.md" multiple hidden>
           <input id="folder-input" type="file" webkitdirectory multiple hidden>
         </div>
 
@@ -38,7 +40,7 @@
         <nav class="file-tree" id="file-tree" aria-label="Arquivos Mermaid"></nav>
 
         <div class="sidebar-footer">
-          <div class="zoom-actions" aria-label="Controles do preview">
+          <div class="zoom-actions" id="zoom-actions" aria-label="Controles do preview">
             <button id="zoom-out" type="button" title="Diminuir zoom" disabled>−</button>
             <button id="zoom-reset" type="button" title="Ajustar à tela" disabled>100%</button>
             <button id="zoom-in" type="button" title="Aumentar zoom" disabled>+</button>
@@ -52,11 +54,12 @@
       <div class="preview-message" id="preview-message">
         <div class="empty-icon" aria-hidden="true">◇</div>
         <strong>Selecione um diagrama</strong>
-        <span>Envie arquivos .mmd e escolha um item na sidebar.</span>
+        <span>Envie arquivos .mmd ou README.md e escolha um item na sidebar.</span>
       </div>
       <div class="viewport" id="viewport" hidden>
         <div class="diagram-stage" id="diagram-stage"></div>
       </div>
+      <article class="markdown-preview" id="markdown-preview" hidden></article>
     </main>
   </body>
 </html>

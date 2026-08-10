@@ -15,6 +15,15 @@ class InvalidPath(ValueError):
     pass
 
 
+def file_kind(relative):
+    path = PurePosixPath(relative)
+    if path.suffix.lower() == ".mmd":
+        return "mermaid"
+    if path.name.casefold() == "readme.md":
+        return "markdown"
+    return None
+
+
 def create_app(storage_dir=None):
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "50")) * 1024 * 1024
@@ -24,7 +33,7 @@ def create_app(storage_dir=None):
     storage_root.mkdir(parents=True, exist_ok=True)
     app.config["STORAGE_ROOT"] = storage_root
 
-    def safe_path(raw_path, require_mmd=True):
+    def safe_path(raw_path, require_supported=True):
         if not isinstance(raw_path, str):
             raise InvalidPath("Caminho ausente.")
 
@@ -37,8 +46,8 @@ def create_app(storage_dir=None):
         relative = PurePosixPath(normalized)
         if any(part in ("", ".", "..") for part in relative.parts):
             raise InvalidPath("O caminho não pode conter '.' ou '..'.")
-        if require_mmd and relative.suffix.lower() != ".mmd":
-            raise InvalidPath("Somente arquivos .mmd são permitidos.")
+        if require_supported and not file_kind(relative):
+            raise InvalidPath("Somente arquivos .mmd e README.md são permitidos.")
 
         target = storage_root.joinpath(*relative.parts)
         try:
@@ -55,7 +64,7 @@ def create_app(storage_dir=None):
         return target, relative.as_posix()
 
     def safe_directory(raw_path):
-        target, relative = safe_path(raw_path, require_mmd=False)
+        target, relative = safe_path(raw_path, require_supported=False)
         if target == storage_root:
             raise InvalidPath("O diretório raiz não pode ser renomeado.")
         return target, relative
@@ -66,7 +75,7 @@ def create_app(storage_dir=None):
             if not candidate.is_file() or candidate.is_symlink():
                 continue
             relative = candidate.relative_to(storage_root)
-            if relative.suffix.lower() != ".mmd":
+            if not file_kind(relative):
                 continue
             if any(parent.is_symlink() for parent in candidate.parents if parent != storage_root):
                 continue
@@ -89,7 +98,7 @@ def create_app(storage_dir=None):
             if not target.is_file():
                 return jsonify(error="Arquivo não encontrado."), 404
             content = target.read_text(encoding="utf-8")
-            return jsonify(path=relative, content=content)
+            return jsonify(path=relative, content=content, type=file_kind(relative))
         except InvalidPath as exc:
             return jsonify(error=str(exc)), 400
         except UnicodeDecodeError:

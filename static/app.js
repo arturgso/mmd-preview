@@ -13,8 +13,10 @@
     zoomIn: document.querySelector("#zoom-in"),
     zoomOut: document.querySelector("#zoom-out"),
     zoomReset: document.querySelector("#zoom-reset"),
+    zoomActions: document.querySelector("#zoom-actions"),
     viewport: document.querySelector("#viewport"),
     stage: document.querySelector("#diagram-stage"),
+    markdown: document.querySelector("#markdown-preview"),
     message: document.querySelector("#preview-message"),
     currentFile: document.querySelector("#current-file"),
     sidebar: document.querySelector("#sidebar"),
@@ -80,7 +82,7 @@
     if (!visible.length) {
       const empty = document.createElement("div");
       empty.className = "tree-empty";
-      empty.textContent = files.length ? "Nenhum arquivo corresponde à busca." : "Nenhum diagrama enviado ainda.";
+      empty.textContent = files.length ? "Nenhum arquivo corresponde à busca." : "Nenhum diagrama ou README enviado ainda.";
       elements.tree.append(empty);
       return;
     }
@@ -113,8 +115,9 @@
       fragment.append(details);
     });
     node.files.sort((a, b) => a.name.localeCompare(b.name, "pt-BR")).forEach((file) => {
+      const markdown = isReadme(file.path);
       const row = document.createElement("div");
-      row.className = `file-row${file.path === selectedPath ? " selected" : ""}`;
+      row.className = `file-row${markdown ? " markdown-file" : ""}${file.path === selectedPath ? " selected" : ""}`;
       const button = document.createElement("button");
       button.type = "button";
       button.className = "file-item";
@@ -127,10 +130,8 @@
       button.addEventListener("click", () => selectFile(file.path));
       const actions = document.createElement("div");
       actions.className = "item-actions";
-      actions.append(
-        actionButton("✎", `Renomear ${file.name}`, () => renameItem("file", file.path)),
-        actionButton("×", `Excluir ${file.name}`, () => deleteFile(file.path), "danger-action")
-      );
+      if (!markdown) actions.append(actionButton("✎", `Renomear ${file.name}`, () => renameItem("file", file.path)));
+      actions.append(actionButton("×", `Excluir ${file.name}`, () => deleteFile(file.path), "danger-action"));
       row.append(button, actions);
       fragment.append(row);
     });
@@ -146,6 +147,10 @@
     const sequence = ++renderSequence;
     try {
       const data = await api(`/api/file?path=${encodeURIComponent(path)}`);
+      if (data.type === "markdown") {
+        await renderMarkdown(data.content, sequence);
+        return;
+      }
       const result = await mermaid.render(`diagram-${sequence}`, data.content);
       if (sequence !== renderSequence) return;
       elements.stage.innerHTML = result.svg;
@@ -156,7 +161,9 @@
       svg.setAttribute("width", diagramWidth);
       svg.setAttribute("height", diagramHeight);
       elements.message.hidden = true;
+      elements.markdown.hidden = true;
       elements.viewport.hidden = false;
+      elements.zoomActions.hidden = false;
       setControls(true);
       requestAnimationFrame(fitDiagram);
       if (window.innerWidth <= 720) setSidebarCollapsed(true);
@@ -168,8 +175,43 @@
     }
   }
 
+  async function renderMarkdown(source, sequence) {
+    if (sequence !== renderSequence) return;
+    elements.stage.replaceChildren();
+    elements.viewport.hidden = true;
+    elements.zoomActions.hidden = true;
+    setControls(false);
+
+    const rendered = marked.parse(source, { gfm: true, breaks: false });
+    elements.markdown.innerHTML = DOMPurify.sanitize(rendered, { USE_PROFILES: { html: true } });
+    elements.markdown.querySelectorAll("a[href]").forEach((link) => {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    });
+    elements.message.hidden = true;
+    elements.markdown.hidden = false;
+    elements.markdown.scrollTop = 0;
+
+    const blocks = [...elements.markdown.querySelectorAll("pre > code.language-mermaid")];
+    for (const code of blocks) {
+      if (sequence !== renderSequence) return;
+      const container = document.createElement("div");
+      container.className = "markdown-mermaid";
+      code.parentElement.replaceWith(container);
+      try {
+        const result = await mermaid.render(`markdown-diagram-${sequence}-${blocks.indexOf(code)}`, code.textContent);
+        if (sequence !== renderSequence) return;
+        container.innerHTML = result.svg;
+      } catch (_error) {
+        container.classList.add("markdown-mermaid-error");
+        container.textContent = "Este bloco Mermaid não pôde ser renderizado.";
+      }
+    }
+  }
+
   function showMessage(title, detail, isError = false) {
     elements.viewport.hidden = true;
+    elements.markdown.hidden = true;
     elements.message.hidden = false;
     elements.message.classList.toggle("error", isError);
     elements.message.replaceChildren();
@@ -273,7 +315,7 @@
       if (wasSelected) {
         const next = files[Math.min(previousIndex, files.length - 1)];
         if (next) await selectFile(next);
-        else showMessage("Nenhum diagrama disponível", "Envie um arquivo .mmd para começar.");
+        else showMessage("Nenhum arquivo disponível", "Envie um arquivo .mmd ou README.md para começar.");
       }
     } catch (error) {
       setStatus(error.message, true);
@@ -293,6 +335,10 @@
       handler(event);
     });
     return button;
+  }
+
+  function isReadme(path) {
+    return path.split("/").pop().toLocaleLowerCase("pt-BR") === "readme.md";
   }
 
   function folderPathFor(details) {
