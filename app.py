@@ -20,7 +20,7 @@ def file_kind(relative):
     path = PurePosixPath(relative)
     if path.suffix.lower() == ".mmd":
         return "mermaid"
-    if path.name.casefold() == "readme.md":
+    if path.suffix.lower() == ".md":
         return "markdown"
     return None
 
@@ -48,7 +48,7 @@ def create_app(storage_dir=None):
         if any(part in ("", ".", "..") for part in relative.parts):
             raise InvalidPath("O caminho não pode conter '.' ou '..'.")
         if require_supported and not file_kind(relative):
-            raise InvalidPath("Somente arquivos .mmd e README.md são permitidos.")
+            raise InvalidPath("Somente arquivos .mmd e .md são permitidos.")
 
         target = storage_root.joinpath(*relative.parts)
         try:

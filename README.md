@@ -1,6 +1,6 @@
-# Mermaid & README Viewer
+# Mermaid & Markdown Viewer
 
-Visualizador web pequeno e em tema escuro para arquivos Mermaid (`.mmd`) e arquivos `README.md`. Permite enviar arquivos ou pastas, navegar pela estrutura preservada, renomear itens e visualizar diagramas ou documentação sem editor, banco de dados ou autenticação.
+Visualizador web pequeno e em tema escuro para arquivos Mermaid (`.mmd`) e Markdown (`.md`). Permite enviar arquivos ou pastas, navegar pela estrutura preservada, renomear itens e visualizar diagramas ou documentação sem editor, banco de dados ou autenticação.
 
 ## Executar com Docker
 
@@ -48,7 +48,7 @@ Também é possível trocar o volume nomeado por um bind mount, como `./data:/da
 
 ## Uso
 
-- **Upload de arquivos:** escolha um ou vários `.mmd` ou `README.md`; eles serão armazenados na raiz.
+- **Upload de arquivos:** escolha um ou vários `.mmd` ou `.md`; eles serão armazenados na raiz.
 - **Selecionar pasta:** escolha uma pasta inteira; sua estrutura relativa será preservada. Outros tipos de arquivo serão informados como rejeitados.
 - **Substituir:** envie novamente um arquivo com o mesmo caminho e nome.
 - **Renomear:** use o ícone de lápis ao lado de um arquivo ou pasta. Nomes existentes não são sobrescritos.
@@ -56,9 +56,9 @@ Também é possível trocar o volume nomeado por um bind mount, como `./data:/da
 - **Excluir pasta:** use o ícone de exclusão na linha da pasta e confirme para remover todo o conteúdo dela.
 - **Buscar:** filtre por qualquer trecho do nome ou do caminho.
 - **Preview:** use os controles da sidebar, a roda do mouse e o arraste para zoom e pan.
-- **README:** Markdown GFM é sanitizado e exibido com rolagem normal. Blocos `mermaid` cercados por três crases são renderizados como diagramas.
+- **Markdown:** qualquer arquivo `.md` é sanitizado e exibido como GFM com rolagem normal. Blocos `mermaid` cercados por três crases são renderizados como diagramas.
 
-Somente arquivos chamados `README.md` são aceitos como Markdown, sem distinção entre maiúsculas e minúsculas. Imagens externas podem ser exibidas; arquivos de imagem relativos não são armazenados pela aplicação.
+Extensões não diferenciam maiúsculas de minúsculas. Imagens externas podem ser exibidas; arquivos de imagem relativos não são armazenados pela aplicação.
 
 O limite padrão por requisição é 50 MB. Ele pode ser alterado com `MAX_UPLOAD_MB`, por exemplo:
 
@@ -94,4 +94,4 @@ python -m unittest discover -s tests -v
 - `DELETE /api/directory?path=...` — exclui uma pasta e todo o conteúdo, recusando links simbólicos.
 - `PATCH /api/path` — renomeia um arquivo ou diretório sem sobrescrever itens existentes.
 
-Somente caminhos relativos terminados em `.mmd` ou cujo nome seja `README.md` são aceitos. Caminhos absolutos, traversal, links simbólicos e conteúdo que não seja UTF-8 são rejeitados.
+Somente caminhos relativos terminados em `.mmd` ou `.md` são aceitos. Caminhos absolutos, traversal, links simbólicos e conteúdo que não seja UTF-8 são rejeitados.

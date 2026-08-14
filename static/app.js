@@ -82,7 +82,7 @@
     if (!visible.length) {
       const empty = document.createElement("div");
       empty.className = "tree-empty";
-      empty.textContent = files.length ? "Nenhum arquivo corresponde à busca." : "Nenhum diagrama ou README enviado ainda.";
+      empty.textContent = files.length ? "Nenhum arquivo corresponde à busca." : "Nenhum arquivo Mermaid ou Markdown enviado ainda.";
       elements.tree.append(empty);
       return;
     }
@@ -120,7 +120,7 @@
       fragment.append(details);
     });
     node.files.sort((a, b) => a.name.localeCompare(b.name, "pt-BR")).forEach((file) => {
-      const markdown = isReadme(file.path);
+      const markdown = isMarkdown(file.path);
       const row = document.createElement("div");
       row.className = `file-row${markdown ? " markdown-file" : ""}${file.path === selectedPath ? " selected" : ""}`;
       const button = document.createElement("button");
@@ -320,7 +320,7 @@
       if (wasSelected) {
         const next = files[Math.min(previousIndex, files.length - 1)];
         if (next) await selectFile(next);
-        else showMessage("Nenhum arquivo disponível", "Envie um arquivo .mmd ou README.md para começar.");
+        else showMessage("Nenhum arquivo disponível", "Envie um arquivo .mmd ou .md para começar.");
       }
     } catch (error) {
       setStatus(error.message, true);
@@ -344,7 +344,7 @@
       setStatus("Pasta e seu conteúdo foram excluídos.");
       if (selectionWasInside) {
         if (files.length) await selectFile(files[0]);
-        else showMessage("Nenhum arquivo disponível", "Envie um arquivo .mmd ou README.md para começar.");
+        else showMessage("Nenhum arquivo disponível", "Envie um arquivo .mmd ou .md para começar.");
       }
     } catch (error) {
       setStatus(error.message, true);
@@ -366,8 +366,8 @@
     return button;
   }
 
-  function isReadme(path) {
-    return path.split("/").pop().toLocaleLowerCase("pt-BR") === "readme.md";
+  function isMarkdown(path) {
+    return path.toLocaleLowerCase("pt-BR").endsWith(".md");
   }
 
   function folderPathFor(details) {
@@ -390,8 +390,8 @@
       setStatus("Informe apenas um nome válido, sem barras.", true);
       return;
     }
-    if (type === "file" && !newName.toLocaleLowerCase("pt-BR").endsWith(".mmd")) {
-      setStatus("O novo nome do arquivo deve terminar em .mmd.", true);
+    if (type === "file" && !/\.(mmd|md)$/i.test(newName)) {
+      setStatus("O novo nome do arquivo deve terminar em .mmd ou .md.", true);
       return;
     }
     const newPath = [...parts, newName].join("/");

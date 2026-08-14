@@ -132,14 +132,17 @@ class MermaidViewerTestCase(unittest.TestCase):
         self.assertIn("# Documentation", loaded["content"])
         self.assertEqual(self.client.delete("/api/file?path=docs/README.md").status_code, 200)
 
-    def test_readme_name_is_case_insensitive_but_other_markdown_is_rejected(self):
+    def test_all_markdown_names_and_case_variants_are_accepted(self):
         accepted = self.upload("project/readme.MD", b"# Project")
-        rejected = self.upload("project/notes.md", b"# Notes")
+        notes = self.upload("project/notes.md", b"# Notes")
         self.assertEqual(accepted.status_code, 200)
-        self.assertEqual(rejected.status_code, 400)
-        self.assertEqual(self.client.get("/api/files").get_json()["files"], ["project/readme.MD"])
+        self.assertEqual(notes.status_code, 200)
+        self.assertEqual(
+            self.client.get("/api/files").get_json()["files"],
+            ["project/notes.md", "project/readme.MD"],
+        )
 
-    def test_mixed_mermaid_readme_and_rejected_markdown_upload(self):
+    def test_mixed_mermaid_and_markdown_upload(self):
         response = self.client.post(
             "/api/files",
             data={
@@ -154,8 +157,17 @@ class MermaidViewerTestCase(unittest.TestCase):
         )
         body = response.get_json()
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(body["accepted"], ["diagram.mmd", "README.md"])
-        self.assertEqual(len(body["rejected"]), 1)
+        self.assertEqual(body["accepted"], ["diagram.mmd", "README.md", "notes.md"])
+        self.assertEqual(body["rejected"], [])
+
+    def test_rename_markdown_file(self):
+        self.upload("docs/notes.md", b"# Notes")
+        response = self.client.patch(
+            "/api/path",
+            json={"type": "file", "old_path": "docs/notes.md", "new_path": "docs/guide.MD"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.get("/api/files").get_json()["files"], ["docs/guide.MD"])
 
     def test_rename_directory_preserves_readme_and_mermaid(self):
         self.upload("old/README.md", b"# Read me")
