@@ -1,6 +1,6 @@
 # Mermaid & Markdown Viewer
 
-Visualizador web pequeno e em tema escuro para arquivos Mermaid (`.mmd`) e Markdown (`.md`). Permite enviar arquivos ou pastas, navegar pela estrutura preservada, renomear itens e visualizar diagramas ou documentação sem editor, banco de dados ou autenticação.
+Visualizador web pequeno e em tema escuro para arquivos Mermaid (`.mmd`) e Markdown (`.md`). Permite enviar arquivos ou pastas, navegar pela estrutura preservada, renomear itens e visualizar diagramas ou documentação sem editor de texto, banco de dados ou autenticação.
 
 ## Executar com Docker
 
@@ -58,6 +58,7 @@ Também é possível trocar o volume nomeado por um bind mount, como `./data:/da
 - **Buscar:** filtre por qualquer trecho do nome ou do caminho.
 - **Preview:** use os controles da sidebar, a roda do mouse e o arraste para zoom e pan.
 - **Markdown:** qualquer arquivo `.md` é sanitizado e exibido como GFM com rolagem normal. Blocos `mermaid` cercados por três crases são renderizados como diagramas.
+- **Tarefas Markdown:** clique no marcador de uma tarefa para alternar entre `[ ]` pendente, `[>]` em andamento, `[x]` concluída e `[!]` bloqueada. Somente o marcador é editável. Ao marcar uma tarefa como em andamento, outra tarefa nesse estado no mesmo arquivo volta automaticamente para pendente.
 
 Extensões não diferenciam maiúsculas de minúsculas. Imagens externas podem ser exibidas; arquivos de imagem relativos não são armazenados pela aplicação.
 
@@ -90,6 +91,7 @@ python -m unittest discover -s tests -v
 
 - `GET /api/files` — lista os caminhos disponíveis.
 - `GET /api/file?path=...` — lê um arquivo.
+- `PATCH /api/markdown/task` — altera somente o estado de uma tarefa Markdown identificada pela linha.
 - `POST /api/files` — recebe multipart com os campos repetidos `paths` e `files`.
 - `DELETE /api/file?path=...` — exclui um arquivo.
 - `DELETE /api/directory?path=...` — exclui uma pasta e todo o conteúdo, recusando links simbólicos.

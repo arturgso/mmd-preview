@@ -118,7 +118,26 @@ body { display: flex; background: var(--canvas); }
 .markdown-preview th, .markdown-preview td { padding: 8px 12px; border: 1px solid var(--line); text-align: left; }
 .markdown-preview th { background: #202631; }
 .markdown-preview hr { height: 1px; border: 0; background: var(--line); }
-.markdown-preview input[type="checkbox"] { accent-color: var(--accent); }
+.markdown-preview input[type="checkbox"] {
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0 .45rem 0 0;
+  border: 1px solid #687386;
+  border-radius: 4px;
+  background: #171c24;
+  color: #fff;
+  vertical-align: -.18rem;
+  cursor: pointer;
+}
+.markdown-preview input[type="checkbox"]::after { content: attr(data-task-state); font-size: .78rem; font-weight: 800; line-height: 1; }
+.markdown-preview input[type="checkbox"][data-task-state="x"] { border-color: #55b99d; background: #267c69; }
+.markdown-preview input[type="checkbox"][data-task-state=">"] { border-color: var(--accent); background: var(--accent-soft); color: #c7c0ff; }
+.markdown-preview input[type="checkbox"][data-task-state="!"] { border-color: var(--danger); background: #482a2c; color: var(--danger); }
+.markdown-preview input[type="checkbox"]:hover { box-shadow: 0 0 0 3px rgba(139, 128, 255, .18); }
+.markdown-preview input[type="checkbox"]:disabled { cursor: wait; opacity: .55; }
 .markdown-mermaid { max-width: 900px; margin: 24px auto; overflow: auto; padding: 16px; border: 1px solid var(--line); border-radius: 7px; background: #181d25; text-align: center; }
 .markdown-mermaid svg { max-width: 100%; height: auto; }
 .markdown-mermaid-error { color: var(--danger); font-size: 13px; }

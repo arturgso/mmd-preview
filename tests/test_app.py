@@ -219,6 +219,75 @@ class MermaidViewerTestCase(unittest.TestCase):
             ["new/diagram.mmd", "new/README.md"],
         )
 
+    def test_update_markdown_task_marker_only(self):
+        original = b"# Plano\n\n- [ ] Primeira\n  detalhe preservado\n- [!] Segunda\n"
+        self.upload("plan.md", original)
+
+        response = self.client.patch(
+            "/api/markdown/task",
+            json={"path": "plan.md", "line": 2, "previous_state": " ", "state": "x"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            (Path(self.temporary.name) / "plan.md").read_text(encoding="utf-8"),
+            "# Plano\n\n- [x] Primeira\n  detalhe preservado\n- [!] Segunda\n",
+        )
+
+    def test_only_one_markdown_task_can_be_in_progress(self):
+        self.upload("plan.md", b"- [>] Primeira\n- [ ] Segunda\n- [x] Terceira\n")
+
+        response = self.client.patch(
+            "/api/markdown/task",
+            json={"path": "plan.md", "line": 1, "previous_state": " ", "state": ">"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["content"], "- [ ] Primeira\n- [>] Segunda\n- [x] Terceira\n")
+
+    def test_update_task_rejects_stale_invalid_and_mermaid_requests(self):
+        self.upload("plan.md", b"- [ ] Tarefa\ntexto comum\n")
+        self.upload("diagram.mmd")
+
+        stale = self.client.patch(
+            "/api/markdown/task",
+            json={"path": "plan.md", "line": 0, "previous_state": "x", "state": "!"},
+        )
+        ordinary_line = self.client.patch(
+            "/api/markdown/task",
+            json={"path": "plan.md", "line": 1, "previous_state": " ", "state": "x"},
+        )
+        invalid_state = self.client.patch(
+            "/api/markdown/task",
+            json={"path": "plan.md", "line": 0, "previous_state": " ", "state": "?"},
+        )
+        mermaid = self.client.patch(
+            "/api/markdown/task",
+            json={"path": "diagram.mmd", "line": 0, "previous_state": " ", "state": "x"},
+        )
+
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(ordinary_line.status_code, 409)
+        self.assertEqual(invalid_state.status_code, 400)
+        self.assertEqual(mermaid.status_code, 400)
+        self.assertEqual((Path(self.temporary.name) / "plan.md").read_bytes(), b"- [ ] Tarefa\ntexto comum\n")
+
+    def test_update_task_rejects_marker_inside_code_fence(self):
+        self.upload("plan.md", b"```text\n- [ ] Isto e codigo\n```\n- [ ] Tarefa real\n")
+
+        fenced = self.client.patch(
+            "/api/markdown/task",
+            json={"path": "plan.md", "line": 1, "previous_state": " ", "state": "x"},
+        )
+        real = self.client.patch(
+            "/api/markdown/task",
+            json={"path": "plan.md", "line": 3, "previous_state": " ", "state": "x"},
+        )
+
+        self.assertEqual(fenced.status_code, 409)
+        self.assertEqual(real.status_code, 200)
+        self.assertIn("- [ ] Isto e codigo", real.get_json()["content"])
+
     def test_symlinks_are_not_listed_or_read(self):
         outside = Path(self.temporary.name).parent / "outside-test.mmd"
         outside.write_text("graph TD; X-->Y", encoding="utf-8")

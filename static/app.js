@@ -33,6 +33,15 @@
   let pointer = null;
   let renderSequence = 0;
   let draggedItem = null;
+  let markdownTaskSaving = false;
+
+  const taskStates = [" ", ">", "x", "!"];
+  const taskLabels = {
+    " ": "Pendente",
+    ">": "Em andamento",
+    x: "Concluído e verificado",
+    "!": "Bloqueado",
+  };
 
   mermaid.initialize({
     startOnLoad: false,
@@ -200,7 +209,23 @@
     elements.zoomActions.hidden = true;
     setControls(false);
 
-    const rendered = marked.parse(source, { gfm: true, breaks: false });
+    const tasks = [];
+    let fence = null;
+    const renderSource = source.split(/\n/).map((line, lineNumber) => {
+      const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+      if (fenceMatch) {
+        const marker = fenceMatch[1];
+        if (!fence) fence = { character: marker[0], length: marker.length };
+        else if (marker[0] === fence.character && marker.length >= fence.length) fence = null;
+        return line;
+      }
+      if (fence) return line;
+      const match = line.match(/^(\s*[-+*]\s+\[)([ xX>!])(\].*?)(\r?)$/);
+      if (!match) return line;
+      tasks.push({ line: lineNumber, state: match[2].toLowerCase() });
+      return `${match[1]} ${match[3]}${match[4]}`;
+    }).join("\n");
+    const rendered = marked.parse(renderSource, { gfm: true, breaks: false });
     elements.markdown.innerHTML = DOMPurify.sanitize(rendered, { USE_PROFILES: { html: true } });
     elements.markdown.querySelectorAll("a[href]").forEach((link) => {
       link.target = "_blank";
@@ -209,6 +234,21 @@
     elements.message.hidden = true;
     elements.markdown.hidden = false;
     elements.markdown.scrollTop = 0;
+
+    const checkboxes = [...elements.markdown.querySelectorAll('.task-list-item input[type="checkbox"]')];
+    tasks.forEach((task, index) => {
+      const checkbox = checkboxes[index];
+      if (!checkbox) return;
+      checkbox.disabled = false;
+      checkbox.dataset.taskState = task.state;
+      checkbox.dataset.line = String(task.line);
+      checkbox.checked = task.state === "x";
+      checkbox.indeterminate = task.state === ">";
+      checkbox.classList.toggle("task-blocked", task.state === "!");
+      checkbox.title = `${taskLabels[task.state]} — clique para alterar`;
+      checkbox.setAttribute("aria-label", checkbox.title);
+      checkbox.addEventListener("click", (event) => updateMarkdownTask(event, task));
+    });
 
     const blocks = [...elements.markdown.querySelectorAll("pre > code.language-mermaid")];
     for (const code of blocks) {
@@ -224,6 +264,29 @@
         container.classList.add("markdown-mermaid-error");
         container.textContent = "Este bloco Mermaid não pôde ser renderizado.";
       }
+    }
+  }
+
+  async function updateMarkdownTask(event, task) {
+    event.preventDefault();
+    if (markdownTaskSaving || !selectedPath) return;
+    const path = selectedPath;
+    const nextState = taskStates[(taskStates.indexOf(task.state) + 1) % taskStates.length];
+    markdownTaskSaving = true;
+    elements.markdown.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => { checkbox.disabled = true; });
+    try {
+      const result = await api("/api/markdown/task", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, line: task.line, previous_state: task.state, state: nextState }),
+      });
+      if (selectedPath === path) await renderMarkdown(result.content, renderSequence);
+      setStatus(`Tarefa marcada como “${taskLabels[nextState]}”.`);
+    } catch (error) {
+      setStatus(error.message, true);
+      if (selectedPath === path) await selectFile(path);
+    } finally {
+      markdownTaskSaving = false;
     }
   }
 
