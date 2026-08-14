@@ -110,6 +110,44 @@ class MermaidViewerTestCase(unittest.TestCase):
         self.assertEqual(directory_response.status_code, 200)
         self.assertEqual(self.client.get("/api/files").get_json()["files"], ["new-folder/new.mmd"])
 
+    def test_move_file_and_directory_between_folders_and_root(self):
+        self.upload("source/item.md", b"# Item")
+        self.upload("source/nested/diagram.mmd")
+        self.upload("target/keep.mmd")
+
+        moved_file = self.client.patch(
+            "/api/path",
+            json={"type": "file", "old_path": "source/item.md", "new_path": "target/item.md"},
+        )
+        moved_directory = self.client.patch(
+            "/api/path",
+            json={"type": "directory", "old_path": "source/nested", "new_path": "nested"},
+        )
+
+        self.assertEqual(moved_file.status_code, 200)
+        self.assertEqual(moved_directory.status_code, 200)
+        self.assertEqual(
+            self.client.get("/api/files").get_json()["files"],
+            ["nested/diagram.mmd", "target/item.md", "target/keep.mmd"],
+        )
+
+    def test_move_directory_rejects_nested_symlink(self):
+        self.upload("source/item.mmd")
+        outside = Path(self.temporary.name).parent / "outside-move-test.mmd"
+        outside.write_text("keep", encoding="utf-8")
+        link = Path(self.temporary.name) / "source" / "link.mmd"
+        try:
+            link.symlink_to(outside)
+            response = self.client.patch(
+                "/api/path",
+                json={"type": "directory", "old_path": "source", "new_path": "target/source"},
+            )
+            self.assertEqual(response.status_code, 400)
+            self.assertTrue((Path(self.temporary.name) / "source").is_dir())
+        finally:
+            link.unlink(missing_ok=True)
+            outside.unlink(missing_ok=True)
+
     def test_rename_rejects_collision_and_invalid_extension(self):
         self.upload("one.mmd")
         self.upload("two.mmd")

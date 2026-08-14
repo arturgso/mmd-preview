@@ -32,6 +32,7 @@
   let diagramHeight = 0;
   let pointer = null;
   let renderSequence = 0;
+  let draggedItem = null;
 
   mermaid.initialize({
     startOnLoad: false,
@@ -79,6 +80,12 @@
     const query = elements.search.value.trim().toLocaleLowerCase("pt-BR");
     const visible = query ? files.filter((path) => path.toLocaleLowerCase("pt-BR").includes(query)) : files;
     elements.tree.replaceChildren();
+    const rootDropTarget = document.createElement("div");
+    rootDropTarget.className = "tree-root-drop";
+    rootDropTarget.textContent = "↳ Mover para a raiz";
+    rootDropTarget.title = "Arraste um arquivo ou pasta aqui para movê-lo para a raiz";
+    makeDropTarget(rootDropTarget, "");
+    elements.tree.append(rootDropTarget);
     if (!visible.length) {
       const empty = document.createElement("div");
       empty.className = "tree-empty";
@@ -89,13 +96,17 @@
     elements.tree.append(renderNode(makeTree(visible), true));
   }
 
-  function renderNode(node, openFolders = false) {
+  function renderNode(node, openFolders = false, parentPath = "") {
     const fragment = document.createDocumentFragment();
     [...node.directories.entries()].sort(([a], [b]) => a.localeCompare(b, "pt-BR")).forEach(([name, child]) => {
       const details = document.createElement("details");
       details.className = "tree-folder";
       details.open = openFolders || Boolean(elements.search.value);
+      const path = parentPath ? `${parentPath}/${name}` : name;
       const summary = document.createElement("summary");
+      summary.draggable = true;
+      makeDraggable(summary, "directory", path);
+      makeDropTarget(summary, path);
       const folderLabel = document.createElement("span");
       folderLabel.className = "folder-label";
       folderLabel.textContent = `📁 ${name}`;
@@ -104,18 +115,18 @@
       const renameFolder = actionButton("✎", `Renomear pasta ${name}`, (event) => {
         event.preventDefault();
         event.stopPropagation();
-        renameItem("directory", folderPathFor(details));
+        renameItem("directory", path);
       });
       const deleteFolder = actionButton("×", `Excluir pasta ${name}`, (event) => {
         event.preventDefault();
         event.stopPropagation();
-        deleteDirectory(folderPathFor(details));
+        deleteDirectory(path);
       }, "danger-action");
       folderActions.append(renameFolder, deleteFolder);
       summary.append(folderLabel, folderActions);
       const children = document.createElement("div");
       children.className = "tree-children";
-      children.append(renderNode(child, openFolders));
+      children.append(renderNode(child, openFolders, path));
       details.append(summary, children);
       fragment.append(details);
     });
@@ -123,6 +134,8 @@
       const markdown = isMarkdown(file.path);
       const row = document.createElement("div");
       row.className = `file-row${markdown ? " markdown-file" : ""}${file.path === selectedPath ? " selected" : ""}`;
+      row.draggable = true;
+      makeDraggable(row, "file", file.path);
       const button = document.createElement("button");
       button.type = "button";
       button.className = "file-item";
@@ -370,14 +383,80 @@
     return path.toLocaleLowerCase("pt-BR").endsWith(".md");
   }
 
-  function folderPathFor(details) {
-    const names = [];
-    let current = details;
-    while (current && current.classList && current.classList.contains("tree-folder")) {
-      names.unshift(current.querySelector(":scope > summary .folder-label").textContent.replace(/^📁\s*/, ""));
-      current = current.parentElement.closest(".tree-folder");
+  function makeDraggable(element, type, path) {
+    element.addEventListener("dragstart", (event) => {
+      event.stopPropagation();
+      draggedItem = { type, path };
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", path);
+      requestAnimationFrame(() => element.classList.add("dragging-item"));
+    });
+    element.addEventListener("dragend", (event) => {
+      event.stopPropagation();
+      draggedItem = null;
+      element.classList.remove("dragging-item");
+      clearDropTargets();
+    });
+  }
+
+  function makeDropTarget(element, directoryPath) {
+    element.addEventListener("dragover", (event) => {
+      if (!draggedItem || !canMoveTo(draggedItem, directoryPath)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "move";
+      clearDropTargets();
+      element.classList.add("drop-target");
+    });
+    element.addEventListener("dragleave", (event) => {
+      if (!element.contains(event.relatedTarget)) element.classList.remove("drop-target");
+    });
+    element.addEventListener("drop", async (event) => {
+      if (!draggedItem || !canMoveTo(draggedItem, directoryPath)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const item = draggedItem;
+      draggedItem = null;
+      clearDropTargets();
+      await moveItem(item.type, item.path, directoryPath);
+    });
+  }
+
+  function canMoveTo(item, directoryPath) {
+    if (item.type !== "directory") return true;
+    return directoryPath !== item.path && !directoryPath.startsWith(`${item.path}/`);
+  }
+
+  function clearDropTargets() {
+    elements.tree.querySelectorAll(".drop-target").forEach((element) => element.classList.remove("drop-target"));
+  }
+
+  async function moveItem(type, oldPath, directoryPath) {
+    const name = oldPath.split("/").pop();
+    const newPath = directoryPath ? `${directoryPath}/${name}` : name;
+    if (newPath === oldPath) {
+      setStatus("O item já está nessa pasta.");
+      return;
     }
-    return names.join("/");
+    try {
+      await api("/api/path", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, old_path: oldPath, new_path: newPath }),
+      });
+      let nextSelection = selectedPath;
+      if (type === "file" && selectedPath === oldPath) nextSelection = newPath;
+      if (type === "directory" && selectedPath && selectedPath.startsWith(`${oldPath}/`)) {
+        nextSelection = newPath + selectedPath.slice(oldPath.length);
+      }
+      selectedPath = nextSelection;
+      await refreshFiles(nextSelection);
+      if (nextSelection && files.includes(nextSelection)) await selectFile(nextSelection);
+      setStatus(`${type === "file" ? "Arquivo" : "Pasta"} movido(a) para ${directoryPath || "a raiz"}.`);
+    } catch (error) {
+      setStatus(error.message, true);
+      await refreshFiles();
+    }
   }
 
   async function renameItem(type, oldPath) {

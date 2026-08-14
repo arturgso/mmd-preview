@@ -213,6 +213,8 @@ def create_app(storage_dir=None):
             if destination.exists():
                 return jsonify(error="Já existe um item com esse nome."), 409
             if item_type == "directory":
+                if any(item.is_symlink() for item in source.rglob("*")):
+                    return jsonify(error="A pasta contém links simbólicos e não pode ser movida."), 400
                 try:
                     destination.relative_to(source)
                     return jsonify(error="Uma pasta não pode ser movida para dentro dela mesma."), 400

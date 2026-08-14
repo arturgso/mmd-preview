@@ -52,6 +52,7 @@ Também é possível trocar o volume nomeado por um bind mount, como `./data:/da
 - **Selecionar pasta:** escolha uma pasta inteira; sua estrutura relativa será preservada. Outros tipos de arquivo serão informados como rejeitados.
 - **Substituir:** envie novamente um arquivo com o mesmo caminho e nome.
 - **Renomear:** use o ícone de lápis ao lado de um arquivo ou pasta. Nomes existentes não são sobrescritos.
+- **Mover:** arraste um arquivo ou pasta para outra pasta. Solte em “Mover para a raiz” para retirá-lo da pasta atual. Colisões e tentativas de mover uma pasta para dentro dela mesma são recusadas.
 - **Excluir:** use o ícone de exclusão na própria linha do arquivo.
 - **Excluir pasta:** use o ícone de exclusão na linha da pasta e confirme para remover todo o conteúdo dela.
 - **Buscar:** filtre por qualquer trecho do nome ou do caminho.
@@ -92,6 +93,6 @@ python -m unittest discover -s tests -v
 - `POST /api/files` — recebe multipart com os campos repetidos `paths` e `files`.
 - `DELETE /api/file?path=...` — exclui um arquivo.
 - `DELETE /api/directory?path=...` — exclui uma pasta e todo o conteúdo, recusando links simbólicos.
-- `PATCH /api/path` — renomeia um arquivo ou diretório sem sobrescrever itens existentes.
+- `PATCH /api/path` — renomeia ou move um arquivo ou diretório sem sobrescrever itens existentes.
 
 Somente caminhos relativos terminados em `.mmd` ou `.md` são aceitos. Caminhos absolutos, traversal, links simbólicos e conteúdo que não seja UTF-8 são rejeitados.
